@@ -25,6 +25,19 @@
   .hlogo{height:42px;max-width:120px;object-fit:contain;background:#fff;border-radius:8px;padding:4px;flex:0 0 auto}
   .logobox{display:flex;align-items:center;justify-content:center;min-height:90px;border:1px dashed var(--line);border-radius:10px;background:#fafcfc;padding:10px}
   .logobox img{max-height:90px;max-width:100%;object-fit:contain}
+  .sv-q{margin-bottom:14px}
+  .sv-q .t{font-weight:600;font-size:13px}
+  .sv-q .ar{font-size:12px;color:var(--muted)}
+  .sv-bar{display:flex;align-items:center;gap:10px;margin-top:6px}
+  .sv-track{flex:1;height:10px;background:var(--line-2);border-radius:999px;overflow:hidden}
+  .sv-fill{height:100%;background:var(--brand-2);border-radius:999px}
+  .sv-avg{font-weight:700;min-width:64px;text-align:right}
+  .sv-dist{display:flex;gap:4px;margin-top:4px;font-size:11px;color:var(--muted)}
+  .sv-dist span{background:var(--line-2);border-radius:6px;padding:1px 7px}
+  .sv-big{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .sv-big div{background:var(--brand-soft);border-radius:10px;padding:10px 14px;min-width:120px}
+  .sv-big b{display:block;font-size:22px}
+  .sv-big span{font-size:12px;color:var(--muted)}
   .p-meeting{background:var(--violet-soft);color:var(--violet)}
   .mom-group{margin-bottom:16px}
   .mom-group h4{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
@@ -553,6 +566,7 @@ function renderWorkshops() {
       '<div class="wactions">' +
         '<button class="btn sm primary" data-act="qr" data-id="' + esc(w.id) + '">QR &amp; poster</button>' +
         '<button class="btn sm" data-act="viewAttendance" data-id="' + esc(w.id) + '">Attendance</button>' +
+        (w.surveyEnabled || w.surveyCount ? '<button class="btn sm" data-act="survey" data-id="' + esc(w.id) + '">Survey (' + (w.surveyCount || 0) + ')' + (w.surveyEnabled ? '' : ' · off') + '</button>' : '') +
         (w.kind === 'Meeting' || w.minutesOpen || w.minutesCount ? '<button class="btn sm" data-act="minutes" data-id="' + esc(w.id) + '">Minutes (' + (w.minutesCount || 0) + ')' + (w.minutesOpen ? ' · open' : '') + '</button>' : '') +
         (a ? '<button class="btn sm" data-act="editWorkshop" data-id="' + esc(w.id) + '">Edit</button>' : '') +
         (a ? '<button class="btn sm" data-act="toggleWorkshop" data-id="' + esc(w.id) + '">' + (w.status === 'Open' ? 'Close registration' : 'Reopen') + '</button>' : '') +
@@ -586,6 +600,12 @@ function workshopForm(id) {
       '<div class="full" id="mSchoolsWrap"' + (isSchool ? '' : ' hidden') + '><label class="f" for="mSchools">School names * — one per line</label>' +
         '<textarea id="mSchools" rows="6" placeholder="Al Ain Model School&#10;Al Yahar Primary School&#10;Al Jimi Secondary School">' + esc(isSchool ? (w.options || []).join('\n') : '') + '</textarea>' +
         '<div class="muted small" style="margin-top:4px">Participants will pick their school from this list. Duplicates are removed automatically.</div></div>' +
+      '<div class="full" style="border-top:1px solid var(--line);padding-top:12px"><label class="switch"><input type="checkbox" id="mSurvey"' + (w.surveyEnabled ? ' checked' : '') + '> Add a satisfaction survey for attendees</label>' +
+        '<div class="muted small" style="margin-top:4px">5 quick ratings (satisfaction, clarity, usefulness, presenter, organization) + an optional comment. Shown to attendees right after they register.</div></div>' +
+      '<div class="full" id="mSurveyWrap"' + (w.surveyEnabled ? '' : ' hidden') + '><div class="fgrid">' +
+        '<div class="full"><label class="f" for="mSvTitle">Survey title</label><input type="text" id="mSvTitle" maxlength="120" value="' + esc(w.surveyTitle || '') + '" placeholder="Session feedback"></div>' +
+        '<div class="full"><label class="f" for="mSvIntro">Short note to attendees (optional)</label><textarea id="mSvIntro" maxlength="500" rows="2" placeholder="Please take one minute to rate this session. Your answers are anonymous in the reports.">' + esc(w.surveyIntro || '') + '</textarea></div>' +
+      '</div></div>' +
       '</div>' +
       (n ? '<p class="muted small" style="margin-top:12px">This workshop has ' + n + ' registration(s). Corrections to title, trainer or date will also update their attendance records (logged in the audit log).</p>' : ''),
     footer: '<button class="btn" data-act="closeModal">Cancel</button><button class="btn primary" id="mSave">' + (id ? 'Save changes' : 'Create workshop') + '</button>'
@@ -595,11 +615,13 @@ function workshopForm(id) {
     $('mTrainerLbl').textContent = this.value === 'Meeting' ? 'Chairperson *' : 'Trainer name *';
     if (this.value === 'Meeting' && !id) $('mMinutes').checked = true;
   });
+  $('mSurvey').addEventListener('change', function () { $('mSurveyWrap').hidden = !this.checked; });
   $('mAud').addEventListener('change', function () { $('mSchoolsWrap').hidden = this.value !== 'School'; if (this.value === 'School') $('mSchools').focus(); });
   $('mSave').onclick = function () {
     var payload = { id: id || '', title: $('mTitle').value, trainer: $('mTrainer').value, date: $('mDate').value, location: $('mLoc').value, status: $('mStatus').value,
       audienceType: $('mAud').value, options: $('mAud').value === 'School' ? $('mSchools').value : '',
-      kind: $('mKind').value, minutesOpen: $('mMinutes').checked };
+      kind: $('mKind').value, minutesOpen: $('mMinutes').checked,
+      surveyEnabled: $('mSurvey').checked, surveyTitle: $('mSvTitle').value, surveyIntro: $('mSvIntro').value };
     if (payload.audienceType === 'School' && !payload.options.trim()) return mErr('Please enter at least one school name (one per line).');
     if (payload.title.trim().length < 3) return mErr('Workshop title is required (at least 3 characters).');
     if (payload.trainer.trim().length < 2) return mErr(payload.kind === 'Meeting' ? 'Chairperson is required.' : 'Trainer name is required.');
@@ -609,6 +631,60 @@ function workshopForm(id) {
       return refresh(true).then(function () { if (!id) openQr(res.workshop.id); });
     }).catch(function (e) { mErr(cleanErr(e)); });
   };
+}
+
+/* ---------------- Satisfaction survey ---------------- */
+function svPct(avg) { return avg == null ? 0 : Math.round((avg - 1) / 4 * 100); }
+function openSurvey(wid) {
+  var w = findW(wid); if (!w) return;
+  openModal({ title: 'Survey results · ' + w.title, wide: true, body: '<div class="empty"><div class="spin" style="margin:0 auto"></div></div>' });
+  api('getSurveyResults', wid).then(function (res) { S.sv = { wid: wid, res: res }; renderSurvey(); })
+    .catch(function (e) { mErr(cleanErr(e)); });
+}
+function renderSurvey() {
+  var w = findW(S.sv.wid), r = S.sv.res;
+  var rate = r.registered ? Math.round(r.responses / r.registered * 100) : 0;
+  var body = '<div class="merr" id="mErr"></div>' +
+    '<div class="bar" style="margin-bottom:12px"><span class="muted small">' + (w.surveyEnabled ? 'Survey is <b>on</b> — attendees see it after registering.' : 'Survey is <b>off</b> for attendees (Edit the workshop to turn it on).') + '</span><span style="flex:1"></span>' +
+      '<button class="btn" data-act="svRefresh">↻ Refresh</button><button class="btn" data-act="svCsv">⬇ CSV</button><button class="btn primary" data-act="svPrint">🖨 Print / PDF</button></div>' +
+    '<div class="sv-big"><div><b>' + r.responses + '</b><span>Responses</span></div><div><b>' + rate + '%</b><span>Response rate (' + r.registered + ' registered)</span></div>' +
+      '<div><b>' + (r.overall == null ? '—' : r.overall.toFixed(2)) + ' / 5</b><span>Overall average</span></div></div>' +
+    (r.responses ? r.questions.map(function (q, i) {
+      return '<div class="sv-q"><div class="t">' + (i + 1) + '. ' + esc(q.en) + '</div><div class="ar" dir="rtl">' + esc(q.ar) + '</div>' +
+        '<div class="sv-bar"><div class="sv-track"><div class="sv-fill" style="width:' + svPct(q.avg) + '%"></div></div><div class="sv-avg">' + (q.avg == null ? '—' : q.avg.toFixed(2)) + ' / 5</div></div>' +
+        '<div class="sv-dist">' + q.dist.map(function (c, k) { return '<span title="' + esc(r.scale[k]) + '">' + (k + 1) + ': ' + c + '</span>'; }).join('') + '</div></div>';
+    }).join('') : '<div class="empty"><b>No responses yet</b>Attendees see the survey right after registering with the QR code.</div>') +
+    (r.comments.length ? '<h4 style="margin:16px 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Comments (' + r.comments.length + ')</h4>' +
+      r.comments.map(function (c) { return '<div class="mpt"><div class="tx">' + esc(c.text) + '</div><div class="mt"><span>' + esc(fmtTs(c.at, true)) + '</span></div></div>'; }).join('') : '') +
+    '<p class="muted small" style="margin-top:12px">Results are anonymous: names are never shown with answers.</p>';
+  $('modalRoot').querySelector('.mbody').innerHTML = body;
+}
+function surveyCsv() {
+  var w = findW(S.sv.wid), r = S.sv.res;
+  if (!r.responses) { toast('No responses to export.', 'bad'); return; }
+  var head = ['#', 'Submitted at'].concat(r.questions.map(function (q, i) { return 'Q' + (i + 1) + ' ' + q.en; })).concat(['Comment']);
+  var lines = [head].concat(r.rows.map(function (x) { return [x.n, fmtTs(x.at)].concat(x.q).concat([x.comment || '']); }))
+    .map(function (row) { return row.map(csvCell).join(','); });
+  var blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'Survey_' + slug(w.title) + '_' + w.date + '.csv';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+}
+function printSurvey() {
+  var w = findW(S.sv.wid), r = S.sv.res;
+  var rate = r.registered ? Math.round(r.responses / r.registered * 100) : 0;
+  var html = '<div class="rpt">' +
+    '<div class="rpt-head"><div style="display:flex;align-items:center">' + (S.logo ? '<img class="rpt-logo" src="' + S.logo + '" alt="">' : '') +
+      '<div><div class="rpt-org">' + esc(S.settings.orgName) + '</div><div class="rpt-title">Session Evaluation Report</div></div></div>' +
+      '<div class="rpt-export">Printed: ' + esc(nowLabel()) + '<br>By: ' + esc(S.user.email) + '</div></div>' +
+    '<table class="rpt-meta"><tr><td>' + (w.kind === 'Meeting' ? 'Meeting' : 'Workshop') + '</td><td>' + esc(w.title) + '</td></tr><tr><td>' + (w.kind === 'Meeting' ? 'Chairperson' : 'Trainer') + '</td><td>' + esc(w.trainer) + '</td></tr>' +
+      '<tr><td>Date</td><td>' + esc(fmtDate(w.date)) + '</td></tr><tr><td>Survey</td><td>' + esc(w.surveyTitle || 'Session feedback') + '</td></tr></table>' +
+    '<div class="rpt-counts"><span><b>Responses:</b> ' + r.responses + '</span><span><b>Registered:</b> ' + r.registered + '</span><span><b>Response rate:</b> ' + rate + '%</span><span><b>Overall average:</b> ' + (r.overall == null ? '—' : r.overall.toFixed(2) + ' / 5') + '</span></div>' +
+    '<table class="rpt-table"><thead><tr><th>#</th><th>Question</th><th>Average</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr></thead><tbody>' +
+      r.questions.map(function (q, i) { return '<tr><td>' + (i + 1) + '</td><td>' + esc(q.en) + '<br><span class="by" dir="rtl">' + esc(q.ar) + '</span></td><td><b>' + (q.avg == null ? '—' : q.avg.toFixed(2)) + '</b></td>' + q.dist.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; }).join('') +
+    '</tbody></table><p class="by">Scale: 1 = ' + esc(r.scale[0]) + ' · 2 = ' + esc(r.scale[1]) + ' · 3 = ' + esc(r.scale[2]) + ' · 4 = ' + esc(r.scale[3]) + ' · 5 = ' + esc(r.scale[4]) + '</p>' +
+    '<h3>Comments (' + r.comments.length + ')</h3>' + (r.comments.length ? '<ol>' + r.comments.map(function (c) { return '<li>' + esc(c.text) + '</li>'; }).join('') + '</ol>' : '<p>None.</p>') +
+    '<div class="rpt-note">Responses were collected anonymously after attendance registration (one response per registered attendee).</div></div>';
+  doPrint(html, 'size:A4 portrait;margin:14mm');
 }
 
 /* ---------------- Meeting minutes (MoM) ---------------- */
@@ -1357,6 +1433,10 @@ var ACT = {
       .catch(function (e) { toast(cleanErr(e), 'bad'); });
   },
   minutes: function (id) { openMinutes(id); },
+  survey: function (id) { openSurvey(id); },
+  svRefresh: function () { openSurvey(S.sv.wid); },
+  svCsv: function () { surveyCsv(); },
+  svPrint: function () { printSurvey(); },
   momRefresh: function () { openMinutes(S.mom.wid); },
   momAdd: function () { pointForm(null); },
   momEdit: function (id) { pointForm(id); },

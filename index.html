@@ -84,6 +84,14 @@
   .rowbar{display:flex;justify-content:space-between;align-items:center;margin:20px 0 10px}
   .rowbar .section-label{margin:0}
   .refresh{border:0;background:none;color:var(--brand-2);font-weight:600;font-size:13px;cursor:pointer;font-family:inherit}
+  .sq{margin-bottom:18px}
+  .sq .qt{font-weight:600;font-size:15px;margin-bottom:2px}
+  .sq .qa{font-size:13px;color:var(--muted);margin-bottom:8px;direction:rtl;text-align:right}
+  .rate{display:flex;gap:6px}
+  .rate button{flex:1;min-height:48px;border:1.5px solid var(--line);background:#fff;border-radius:10px;font-size:18px;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit}
+  .rate button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+  .scale{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
+  .sq.missing .rate button{border-color:var(--bad)}
   [hidden]{display:none!important}
 </style>
 </head>
@@ -189,6 +197,27 @@
       </div>
     </div>
 
+    <!-- Survey -->
+    <div class="card" id="svPanel" hidden style="margin-top:14px">
+      <h2 class="mh" id="svTitle">Session feedback</h2>
+      <p class="lead" id="svIntro" style="white-space:pre-wrap"></p>
+      <div id="svQuestions"></div>
+      <div class="field">
+        <label class="lbl" for="svComment">Comments or suggestions <span class="hint" style="font-weight:400">(optional)</span></label>
+        <div class="qa" style="font-size:13px;color:var(--muted);direction:rtl;text-align:right;margin-bottom:6px">ملاحظات أو اقتراحات (اختياري)</div>
+        <textarea id="svComment" maxlength="1000" placeholder="What did you like? What could be better?"></textarea>
+      </div>
+      <div class="banner bad" id="svError" role="alert"></div>
+      <button type="button" class="btn" id="svSubmit"><span id="svSubmitLabel">Submit feedback</span></button>
+    </div>
+    <div class="card" id="svDone" hidden style="margin-top:14px">
+      <div class="state" style="padding:14px 6px">
+        <div class="ic ok" style="width:48px;height:48px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+        <h2 style="font-size:17px">Thank you for your feedback</h2>
+        <p style="font-size:14px">شكراً لمشاركتك في الاستبيان</p>
+      </div>
+    </div>
+
     <!-- Meeting minutes -->
     <div class="card" id="momPanel" hidden style="margin-top:14px">
       <h2 class="mh">Meeting minutes</h2>
@@ -232,7 +261,7 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbxB9I-XqK969yeY6dipbmx5nk
   function runner() {
     var ok = function () {}, fail = function () {};
     var api = { withSuccessHandler: function (f) { ok = f; return api; }, withFailureHandler: function (f) { fail = f; return api; } };
-    ['getPublicWorkshop', 'submitRegistration', 'getMyRegistration', 'addMinutePoint', 'deleteMyMinutePoint'].forEach(function (fn) {
+    ['getPublicWorkshop', 'submitRegistration', 'getMyRegistration', 'addMinutePoint', 'deleteMyMinutePoint', 'submitSurvey'].forEach(function (fn) {
       api[fn] = function () { call(fn, Array.prototype.slice.call(arguments), ok, fail); };
     });
     return api;
@@ -258,7 +287,7 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbxB9I-XqK969yeY6dipbmx5nk
   function $(id) { return document.getElementById(id); }
   function show(id) {
     ['loading', 'errorState', 'regForm', 'successState'].forEach(function (x) { $(x).hidden = (x !== id); });
-    if (id !== 'successState') { $('momPanel').hidden = true; $('momClosed').hidden = true; }
+    if (id !== 'successState') { $('momPanel').hidden = true; $('momClosed').hidden = true; $('svPanel').hidden = true; $('svDone').hidden = true; }
     window.scrollTo(0, 0);
   }
   function loadAccess() { try { var v = window.localStorage.getItem('wsmom_' + WID); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
@@ -314,6 +343,7 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbxB9I-XqK969yeY6dipbmx5nk
             date: res.workshop.date, timestamp: res.timestamp, specialty: '', reference: '' });
           $('anotherBtn').hidden = false;
           show('successState');
+          showSurvey(res.survey);
           showMinutes(res.workshop.kind === 'Meeting' || res.minutesOpen, res.minutesOpen, res.points);
         })
         .withFailureHandler(function () { loadForm(); })
@@ -454,6 +484,7 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbxB9I-XqK969yeY6dipbmx5nk
           if (res.access) saveAccess({ regId: res.access.regId, token: res.access.token, name: res.receipt.fullName });
           renderReceipt(res.receipt);
           show('successState');
+          showSurvey(res.survey);
           showMinutes(IS_MEETING || res.minutesOpen, res.minutesOpen, res.points);
           return;
         }
@@ -472,6 +503,62 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbxB9I-XqK969yeY6dipbmx5nk
         $('formError').classList.add('show');
       })
       .submitRegistration(d);
+  });
+
+  /* ---------- Survey ---------- */
+  var SV = {};
+  function showSurvey(sv) {
+    $('svPanel').hidden = true; $('svDone').hidden = true;
+    if (!sv) return;
+    if (sv.submitted) { $('svDone').hidden = false; return; }
+    SV = {};
+    $('svTitle').textContent = sv.title; $('svIntro').textContent = sv.intro;
+    var box = $('svQuestions'); box.innerHTML = '';
+    sv.questions.forEach(function (q, i) {
+      var d = document.createElement('div'); d.className = 'sq'; d.id = 'sq_' + q.id;
+      var t = document.createElement('div'); t.className = 'qt'; t.textContent = (i + 1) + '. ' + q.en; d.appendChild(t);
+      var ar = document.createElement('div'); ar.className = 'qa'; ar.textContent = q.ar; d.appendChild(ar);
+      var r = document.createElement('div'); r.className = 'rate'; r.setAttribute('role', 'radiogroup');
+      for (var v = 1; v <= 5; v++) (function (v) {
+        var b = document.createElement('button'); b.type = 'button'; b.textContent = v; b.title = sv.scale[v - 1];
+        b.setAttribute('aria-label', v + ' – ' + sv.scale[v - 1]);
+        b.addEventListener('click', function () {
+          SV[q.id] = v; d.classList.remove('missing');
+          Array.prototype.forEach.call(r.children, function (x, k) { x.classList.toggle('on', k === v - 1); });
+        });
+        r.appendChild(b);
+      })(v);
+      d.appendChild(r);
+      var sc = document.createElement('div'); sc.className = 'scale';
+      var lo = document.createElement('span'); lo.textContent = '1 = ' + sv.scale[0];
+      var hi = document.createElement('span'); hi.textContent = '5 = ' + sv.scale[4];
+      sc.appendChild(lo); sc.appendChild(hi); d.appendChild(sc);
+      box.appendChild(d);
+    });
+    SV.__q = sv.questions;
+    $('svPanel').hidden = false;
+  }
+  function svErr(m) { $('svError').textContent = m || ''; $('svError').classList.toggle('show', !!m); }
+  $('svSubmit').addEventListener('click', function () {
+    if (!ACCESS) { svErr('Please register your attendance first.'); return; }
+    var miss = (SV.__q || []).filter(function (q) { return !SV[q.id]; });
+    if (miss.length) {
+      miss.forEach(function (q) { $('sq_' + q.id).classList.add('missing'); });
+      svErr('Please answer all the questions (1 to 5).');
+      $('sq_' + miss[0].id).scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
+    var answers = {}; SV.__q.forEach(function (q) { answers[q.id] = SV[q.id]; });
+    $('svSubmit').disabled = true; $('svSubmitLabel').textContent = 'Sending…'; svErr('');
+    google.script.run.withSuccessHandler(function (res) {
+      $('svSubmit').disabled = false; $('svSubmitLabel').textContent = 'Submit feedback';
+      if (res && (res.ok || res.code === 'DUPLICATE')) { $('svPanel').hidden = true; $('svDone').hidden = false; return; }
+      if (res && res.code === 'CLOSED') { $('svPanel').hidden = true; return; }
+      svErr((res && res.message) || 'Could not send. Please try again.');
+    }).withFailureHandler(function () {
+      $('svSubmit').disabled = false; $('svSubmitLabel').textContent = 'Submit feedback';
+      svErr('Connection problem — please check your internet and try again.');
+    }).submitSurvey({ workshopId: WID, regId: ACCESS.regId, token: ACCESS.token, answers: answers, comment: $('svComment').value });
   });
 
   /* ---------- Meeting minutes ---------- */
